@@ -6,6 +6,10 @@ from sklearn.ensemble import RandomForestClassifier, HistGradientBoostingClassif
 from xgboost import XGBClassifier
 from sklearn.metrics import accuracy_score, f1_score, classification_report, confusion_matrix
 import joblib
+import os
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATA_PATH = os.path.join(BASE_DIR, "data", "images_malware.npz")
 
 def load_npz(path):
     data = np.load(path, allow_pickle=True)
@@ -60,7 +64,10 @@ def main(npz_path):
     print("Saved model:", f"best_model_{best_name}.joblib")
 
 if __name__ == '__main__':
+    
     if len(sys.argv) < 2:
-        print("Usage: python first_sim_no_rebal.py /path/to/images_malware.npz")
-        sys.exit(1)
-    main(sys.argv[1])
+        npz_path = DATA_PATH
+    else:
+        npz_path = sys.argv[1]
+    
+    main(npz_path)
