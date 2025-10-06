@@ -18,6 +18,7 @@ pip install -r requirements.txt
 
 ## Project Structure
 
+```text
 ├── data/
 │   └── images_malware.npz         # Original dataset (not modified)
 ├── src/
@@ -25,3 +26,4 @@ pip install -r requirements.txt
 ├── reports/                       # Figures, metrics, and evaluation results
 ├── requirements.txt               # Dependencies
 └── README.md
+```
