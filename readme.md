@@ -14,10 +14,10 @@ Clone the repository and install the required dependencies:
 git clone https://github.com/raphlp/Ma513.git
 cd Ma513
 pip install -r requirements.txt
-'''
+```
 
 ## Project Structure
-.
+
 ├── data/
 │   └── images_malware.npz         # Original dataset (not modified)
 ├── src/
