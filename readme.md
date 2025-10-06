@@ -66,4 +66,4 @@ All outputs (metrics, plots, and models) are saved in the result/ directory.
 ## Conclusion
 
 This study confirms that ensemble learning techniques are highly effective for fraud detection tasks when combined with appropriate data rebalancing.
-While Random Forest achieved the best compromise between precision and recall, SMOTE proved to be the most beneficial strategy for mitigating extreme class imbalance.
+While Random Forest achieved the best compromise between precision and recall, SMOTE proved to be the most beneficial strategy for mitigating extreme class imbalance. Read the report to see more details.
