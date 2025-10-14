@@ -6,10 +6,10 @@ The chosen dataset is the Credit Card Fraud Detection Dataset (Kaggle) (`creditc
 This extreme imbalance makes it a perfect case to study the impact of resampling techniques on model performance.
 
 ## Objectives
-	•	Evaluate the performance of ensemble models on highly imbalanced financial data.
-	•	Experiment with different rebalancing strategies, including SMOTE oversampling and random undersampling.
-	•	Compare models using relevant metrics beyond accuracy: F1-score, ROC-AUC, and Precision-Recall AUC.
-	•	Analyze trade-offs between false positives and false negatives, emphasizing interpretability for fraud detection use cases.
+    •    Evaluate the performance of ensemble models on highly imbalanced financial data.
+    •    Experiment with different rebalancing strategies, including SMOTE oversampling and random undersampling.
+    •    Compare models using relevant metrics beyond accuracy: F1-score, ROC-AUC, and Precision-Recall AUC.
+    •    Analyze trade-offs between false positives and false negatives, emphasizing interpretability for fraud detection use cases.
 
 ## Installation
 Clone the repository and install the required dependencies:
@@ -46,22 +46,22 @@ Launch the project interactively:
 python src/main.py
 
 You will be prompted to choose among the following options:
-	•	A) Baseline — train ensemble models without rebalancing
-	•	B) SMOTE — train with synthetic oversampling
-	•	C) Undersampling — reduce majority class
-	•	D) Compare — run and compare A, B, and C automatically
-	•	E) Quick demo — display the latest saved results without retraining
+    •    A) Baseline — train ensemble models without rebalancing
+    •    B) SMOTE — train with synthetic oversampling
+    •    C) Undersampling — reduce majority class
+    •    D) Compare — run and compare A, B, and C automatically
+    •    E) Quick demo — display the latest saved results without retraining
 
 All outputs (metrics, plots, and models) are saved in the result/ directory.
 
 ## Evaluation
 
-	•	The best configuration obtained was Random Forest + SMOTE, with:
-	•	F1-score: 0.8397
-	•	ROC-AUC: 0.9786
-	•	Precision-Recall AUC: 0.819
-	•	Undersampling produced faster training but significantly lower F1-scores.
-	•	XGBoost remained stable across all scenarios but required longer training.
+    •    The best configuration obtained was Random Forest + SMOTE, with:
+    •    F1-score: 0.8397
+    •    ROC-AUC: 0.9786
+    •    Precision-Recall AUC: 0.819
+    •    Undersampling produced faster training but significantly lower F1-scores.
+    •    XGBoost remained stable across all scenarios but required longer training.
 
 ## Conclusion
 
