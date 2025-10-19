@@ -20,9 +20,10 @@ from utils import (
 from rebalance import apply_rebalance
 
 
-def eval_pipeline(pipe, X_test, y_test, tag: str):
+def eval_pipeline(pipe, X_train, y_train, X_test, y_test, tag: str):
     """Evaluate a fitted pipeline (used for rebalanced runs)."""
     y_pred = pipe.predict(X_test)
+    y_pred_train = pipe.predict(X_train)
 
     # Probabilities if available
     if hasattr(pipe.named_steps["clf"], "predict_proba"):
@@ -31,14 +32,15 @@ def eval_pipeline(pipe, X_test, y_test, tag: str):
         y_proba = None
 
     acc = accuracy_score(y_test, y_pred)
-    f1 = f1_score(y_test, y_pred)
+    f1_train = f1_score(y_train, y_pred_train)
+    f1_test = f1_score(y_test, y_pred)
     ap = average_precision_score(y_test, y_proba) if y_proba is not None else float("nan")
     roc = roc_auc_score(y_test, y_proba) if y_proba is not None else float("nan")
     rep = classification_report(y_test, y_pred, digits=4)
     cm = confusion_matrix(y_test, y_pred)
 
     return {
-        "name": tag, "pipeline": pipe, "acc": acc, "f1": f1, "ap": ap, "roc": roc,
+        "name": tag, "pipeline": pipe, "acc": acc, "f1_train": f1_train, "f1_test": f1_test, "ap": ap, "roc": roc,
         "train_time_s": None, "report": rep, "cm": cm
     }
 
@@ -51,13 +53,17 @@ def run_baseline():
 
     models = get_models(use_class_weight=False)
     results = {}
-    best_key, best_f1 = None, -1.0
+    best_key, best_f1_train, best_f1_test = [None, None], -1.0, -1.0
 
     for name, model in models.items():
         out = fit_eval(model, preproc, X_train, y_train, X_test, y_test, name=f"{name}[baseline]")
         results[out["name"]] = out
-        if out["f1"] > best_f1:
-            best_f1, best_key = out["f1"], out["name"]
+        
+        if out["f1_train"] > best_f1_train:
+            best_f1, best_key[0] = out["f1_train"], out["name"]
+        
+        if out["f1_test"] > best_f1_test:
+            best_f1, best_key[1] = out["f1_test"], out["name"]
 
     return results, best_key
 
@@ -70,7 +76,7 @@ def run_rebalanced(strategy: str = "smote", k_neighbors: int = 5):
 
     models = get_models(use_class_weight=False)
     results = {}
-    best_key, best_f1 = None, -1.0
+    best_key, best_f1_train, best_f1_test = [None, None], -1.0, -1.0
 
     for name, base_model in models.items():
         pipe = apply_rebalance(base_model, preproc, strategy=strategy, k_neighbors=k_neighbors)
@@ -79,12 +85,15 @@ def run_rebalanced(strategy: str = "smote", k_neighbors: int = 5):
         t1 = time.time()
 
         tag = f"{name}[{strategy}]"
-        out = eval_pipeline(pipe, X_test, y_test, tag)
+        out = eval_pipeline(pipe, X_train, y_train, X_test, y_test, tag)
         out["train_time_s"] = t1 - t0
         results[tag] = out
 
-        if out["f1"] > best_f1:
-            best_f1, best_key = out["f1"], tag
+        if out["f1_train"] > best_f1_train:
+            best_f1_train, best_key[0] = out["f1_train"], tag
+
+        if out["f1_test"] > best_f1_test:
+            best_f1_test, best_key[1] = out["f1_test"], tag
 
     return results, best_key
 
@@ -96,12 +105,13 @@ def save_outputs(results: dict, best_key: str, mode_label: str):
     metrics_csv = RESULT_DIR / f"metrics_{mode_label}.csv"
     with open(metrics_csv, "w", newline="") as f:
         w = csv.writer(f)
-        w.writerow(["name", "accuracy", "f1", "avg_precision", "roc_auc", "train_time_s"])
+        w.writerow(["name", "accuracy", "f1_train", "f1_test", "avg_precision", "roc_auc", "train_time_s"])
         for k, r in results.items():
             w.writerow([
                 r["name"],
                 f"{r['acc']:.6f}",
-                f"{r['f1']:.6f}",
+                f"{r['f1_train']:.6f}",
+                f"{r['f1_test']:.6f}",
                 _fmt(r['ap']),
                 _fmt(r['roc']),
                 _fmt(r['train_time_s'])
@@ -109,25 +119,36 @@ def save_outputs(results: dict, best_key: str, mode_label: str):
     print(f"Saved metrics → {metrics_csv}")
 
     # --- Save best trained model ---
-    best_pipe = results[best_key]["pipeline"]
-    model_path = RESULT_DIR / f"best_model_{_sanitize(best_key)}.joblib"
+    best_pipe = results[best_key[1]]["pipeline"]
+    model_path = RESULT_DIR / f"best_model_{_sanitize(best_key[1])}.joblib"
     joblib.dump(best_pipe, model_path)
     print(f"Saved best model → {model_path}")
-    print(f"Best: {best_key} | F1: {results[best_key]['f1']:.4f}")
+    print(f"Best on training set: {best_key[0]} | F1: {results[best_key[0]]['f1_train']:.4f}")
+    print(f"Best on testing set: {best_key[1]} | F1: {results[best_key[1]]['f1_test']:.4f}")
 
     # --- Save a simple F1 bar chart ---
     try:
         df_plot = pd.DataFrame([
-            {"name": r["name"], "f1": r["f1"]}
+            {"name": r["name"], "f1_train": r["f1_train"], 'f1_test': r['f1_test']}
             for r in results.values()
-        ]).sort_values("f1", ascending=False)
+        ]).sort_values("f1_train", ascending=False)
 
-        import matplotlib.pyplot as plt
-        plt.figure(figsize=(9, 4.8))
-        plt.bar(df_plot["name"], df_plot["f1"], color="steelblue")
-        plt.title(f"F1-score comparison — {mode_label}")
-        plt.ylabel("F1-score")
-        plt.xticks(rotation=30, ha="right")
+        fig,axes = plt.subplots(2,1,figsize=(9, 9.6))
+        
+        x = range(len(df_plot["name"]))
+        
+        axes[0].bar(df_plot["name"], df_plot["f1_train"], color="steelblue")
+        axes[0].set_title(f"F1-score comparison on training set — {mode_label}")
+        axes[0].set_ylabel("F1-score")
+        axes[0].set_xticks(x)
+        axes[0].set_xticklabels(df_plot["name"], rotation=30, ha="right")
+        
+        axes[1].bar(df_plot["name"], df_plot["f1_test"], color="steelblue")
+        axes[1].set_title(f"F1-score comparison on testing set — {mode_label}")
+        axes[1].set_ylabel("F1-score")
+        axes[1].set_xticks(x)
+        axes[1].set_xticklabels(df_plot["name"], rotation=30, ha="right")
+        
         plt.tight_layout()
 
         plot_path = RESULT_DIR / f"plot_{mode_label}_f1.png"
@@ -175,14 +196,14 @@ def find_latest_metrics():
 def print_metrics_csv(path: str):
     df = pd.read_csv(path)
     print(f"\n=== Metrics file: {path} ===")
-    cols = [c for c in ["name","f1","roc_auc","avg_precision","accuracy","train_time_s"] if c in df.columns]
+    cols = [c for c in ["name","f1_train","f1_test","roc_auc","avg_precision","accuracy","train_time_s"] if c in df.columns]
     print(df[cols].to_string(index=False))
-    if "f1" in df.columns:
-        best_row = df.iloc[df["f1"].idxmax()]
-        print(f"\nBest by F1: {best_row['name']} (F1={best_row['f1']:.4f})")
+    if "f1_test" in df.columns:
+        best_row = df.iloc[df["f1_test"].idxmax()]
+        print(f"\nBest by F1: {best_row['name']} (F1={best_row['f1_test']:.4f})")
 
     # Save a plot next to the CSV if not already there
-    out_png = path.replace("metrics_", "plot_").replace(".csv", "_f1.png")
+    out_png = path.replace("metrics_", "plot_").replace(".csv", "_f1_test.png")
     try:
         _plot_f1_bar(df, out_png, title="F1 comparison — quick demo")
         print(f"Saved plot   → {out_png}")
@@ -205,9 +226,9 @@ def _results_to_df(results: dict) -> pd.DataFrame:
 
 def _plot_f1_bar(df: pd.DataFrame, out_path: str, title: str = "F1-score comparison"):
     """Create a simple bar chart of F1 by model name."""
-    df_plot = df[["name", "f1"]].sort_values("f1", ascending=False)
+    df_plot = df[["name", "f1_test"]].sort_values("f1_test", ascending=False)
     plt.figure(figsize=(9, 4.8))
-    plt.bar(df_plot["name"], df_plot["f1"])
+    plt.bar(df_plot["name"], df_plot["f1_test"])
     plt.title(title)
     plt.ylabel("F1-score")
     plt.xticks(rotation=30, ha="right")
@@ -241,7 +262,8 @@ def main():
         results.update(res_a)
         results.update(res_b)
         results.update(res_c)
-        best_key = max(results.keys(), key=lambda x: results[x]["f1"])
+        best_key = [max(results.keys(), key=lambda x: results[x]["f1_train"]),
+                    max(results.keys(), key=lambda x: results[x]["f1_test"])]
         save_outputs(results, best_key, mode_label=f"d_compare_all_k{k}")
 
     elif choice == "e":  # Quick demo (no training)
@@ -250,7 +272,6 @@ def main():
             print_metrics_csv(latest)
         else:
             print("No metrics found in result/. Run A/B/C/D first to generate metrics.")
-            
-            
+
 if __name__ == "__main__":
     main()

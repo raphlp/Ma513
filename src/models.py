@@ -1,4 +1,5 @@
 from sklearn.ensemble import RandomForestClassifier, HistGradientBoostingClassifier
+from sklearn.svm import SVC
 from xgboost import XGBClassifier
 
 def get_models(use_class_weight: bool = False):
@@ -21,5 +22,6 @@ def get_models(use_class_weight: bool = False):
             subsample=0.8, colsample_bytree=0.8,
             eval_metric="logloss", random_state=42, n_jobs=-1, tree_method="hist"
         ),
+        "SVM" : SVC(C = 1, kernel = 'rbf', gamma = 'scale', max_iter = 5000)
     }
     return models
