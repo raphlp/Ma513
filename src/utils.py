@@ -71,6 +71,7 @@ def fit_eval(model, preproc, X_train, y_train, X_test, y_test, sample_weight=Non
 
     # Predictions
     y_pred = pipe.predict(X_test)
+    y_pred_train = pipe.predict(X_train)
     # Probabilities (if available)
     if hasattr(pipe.named_steps["clf"], "predict_proba"):
         y_proba = pipe.predict_proba(X_test)[:, 1]
@@ -83,7 +84,8 @@ def fit_eval(model, preproc, X_train, y_train, X_test, y_test, sample_weight=Non
 
     # Metrics
     acc = accuracy_score(y_test, y_pred)
-    f1 = f1_score(y_test, y_pred)  # binary F1 (class=1)
+    f1_train = f1_score(y_train, y_pred_train)
+    f1_test = f1_score(y_test, y_pred)  # binary F1 (class=1)
     ap = average_precision_score(y_test, y_proba) if y_proba is not None else np.nan
     roc = roc_auc_score(y_test, y_proba) if y_proba is not None else np.nan
 
@@ -95,7 +97,8 @@ def fit_eval(model, preproc, X_train, y_train, X_test, y_test, sample_weight=Non
         "name": name,
         "pipeline": pipe,
         "acc": acc,
-        "f1": f1,
+        "f1_train": f1_train,
+        "f1_test": f1_test,
         "ap": ap,
         "roc": roc,
         "train_time_s": t1 - t0,
