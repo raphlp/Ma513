@@ -123,7 +123,8 @@ def save_outputs(results: dict, best_key: str, mode_label: str):
                 f"{r['f1_test']:.6f}",
                 _fmt(r['ap']),
                 _fmt(r['roc']),
-                _fmt(r['train_time_s'])
+                _fmt(r['train_time_s']),
+                
             ])
     print(f"Saved metrics → {metrics_csv}\n")
 
@@ -173,12 +174,14 @@ def simple_menu():
         print("Invalid choice. Defaulting to D (compare all).")
         choice = "d"
 
-    # ask k only if SMOTE might be used
+    # Ask k only if SMOTE might be used
     k = 5
     if choice in {"b", "d"}:
         k_in = input("SMOTE k_neighbors (default 5): ").strip()
         if k_in.isdigit():
             k = int(k_in)
+        else:
+            print("Invalid choice. Defaulting to k = 5.")
 
     print("Do you want to display the confusion matrices ?")
     display = input("[Y/N] ? ").strip().lower()
@@ -186,8 +189,11 @@ def simple_menu():
     return [choice, display], k
 
 def find_latest_metrics():
-    files = sorted(glob.glob(str(RESULT_DIR / "metrics_*.csv")))
-    return files[-1] if files else None
+    files = glob.glob(str(RESULT_DIR / "metrics_*.csv"))
+    if not files:
+        return None
+    latest = max(files, key=os.path.getmtime) # Gets the last one that was modified
+    return latest
 
 def print_metrics_csv(path: str):
     df = pd.read_csv(path)
@@ -199,12 +205,30 @@ def print_metrics_csv(path: str):
         print(f"\nBest by F1 on testing set: {best_row['name']} (F1={best_row['f1_test']:.4f})")
 
     # Save a plot next to the CSV if not already there
-    out_png = path.replace("metrics_", "plot_").replace(".csv", "_f1_test.png")
+    out_png = path.replace("metrics_", "plot_").replace(".csv", "_quick_demo_f1_test.png")
     try:
-        _plot_f1_bar(df, out_png, mode_label = "quick demo",titles=["Training set", "Testing set"])
+        _plot_f1_bar(df, out_png, mode_label="quick demo", titles=["Training set", "Testing set"])
         print(f"Saved plot   → {out_png}\n")
+
+        # Optional: regenerate confusion matrix using the best model
+        best_name = best_row["name"]
+        joblib_path = RESULT_DIR / f"best_model_{_sanitize(best_name)}.joblib"
+        if os.path.exists(joblib_path):
+            print(f"Reloading best model to compute confusion matrix: {best_name}")
+            model = joblib.load(joblib_path)
+            X, y = load_creditcard()
+            preproc = build_preprocessor(X)
+            X_train, X_test, y_train, y_test = time_based_split(X, y, test_size=0.2)
+            y_pred = model.predict(X_test)
+            cm = confusion_matrix(y_test, y_pred)
+            results = {best_name: {"cm": cm}}
+            _plot_confusion_matrix(results, mode_label="quick_demo")
+        else:
+            print("(No saved model found for confusion matrix.)")
+
     except Exception as e:
         print(f"(Plot skipped: {e})")
+
 
 def _results_to_df(results: dict) -> pd.DataFrame:
     """Convert the results dict into a tidy DataFrame (name, f1, roc, ap, acc, time)."""
@@ -255,49 +279,73 @@ def _plot_f1_bar(df: pd.DataFrame, out_path: str, mode_label: str, titles: list 
     plt.savefig(out_path, dpi=200)
     plt.close()
 
-def _plot_confusion_matrix(results: dict, mode_label: str):
-    """Plot confusion matrices for many models."""
-    n_models = len(results)
-    
+def _plot_confusion_matrix(results: dict, mode_label: str, routines_labels=None):
+    """
+    Plot confusion matrices for one or several routines (baseline, SMOTE, under).
+    - results: dict like {'LR_baseline': {'cm': ...}, 'RF_smote': {'cm': ...}, ...}
+    - mode_label: 
+    - routines_labels: list of routines to display in rows.
+    """
     sns.set_style("whitegrid")
-    
-    fig, axes = plt.subplots(1, n_models, figsize=(6 * n_models, 6), constrained_layout = True)
-    
+
+    # In case we choose the strategy Baseline, SMOTE or under 
+    if routines_labels is None:
+        routines_labels = [""]
+
+    model_names = list(set(sorted({k.split("[")[0] for k in results.keys()}))) # Delete multiple names
+    n_routines = len(routines_labels) if routines_labels is not None else 1 
+    n_models = len(model_names) 
+
+    fig, axes = plt.subplots(
+        n_routines, n_models,
+        figsize=(5 * n_models, 5 * n_routines),
+        squeeze=False,
+        constrained_layout=True
+    )
+
+    for i, routine in enumerate(routines_labels):
+        for j, model in enumerate(model_names):
+            ax = axes[i, j]
+
+            # Looks for the model for this routine 
+            match = [k for k in results if model in k and routine in k]
+            if not match:
+                ax.axis("off")
+                continue
+
+            cm = results[match[0]]["cm"]
+            cm_norm = cm / cm.sum(axis=1, keepdims=True)
+
+            sns.heatmap(
+                cm_norm,
+                annot=True,
+                fmt=".2f",
+                cmap="Blues",
+                cbar=False,
+                square=True,
+                linewidths=1.5,
+                linecolor="white",
+                xticklabels=["Non fraud", "Fraud"],
+                yticklabels=["Non fraud", "Fraud"],
+                ax=ax
+            )
+
+            ax.set_title(match[0], fontsize=13, fontweight="bold", pad=12)
+            ax.set_xlabel("Prediction")
+            ax.set_ylabel("True class")
+
     out_path = RESULT_DIR / f"plot_{mode_label}_confusion_matrix.png"
-    
-    for ax, (model_name, r) in zip(axes, results.items()):
-        cm = r["cm"]
-        cm_normalized = cm / cm.sum(axis=1, keepdims=True)  # percentage per line
-
-        # Heatmap 
-        sns.heatmap(
-            cm_normalized,
-            annot=True,
-            fmt=".2f",
-            cmap="Blues",
-            cbar=False,
-            square = True,
-            linewidths=1.5,
-            linecolor="white",
-            xticklabels=["Non fraud", "Fraud"],
-            yticklabels=["Non fraud", "Fraud"],
-            ax=ax
-        )
-        ax.set_title(f"{model_name}\nConfusion matrix — {mode_label}", fontsize=13, fontweight="semibold", pad=15)
-        
-        ax.set_xlabel("Prediction", fontsize=11)
-        ax.set_ylabel("True class", fontsize=11)
-
     plt.savefig(out_path, dpi=200)
     plt.close()
-    print(f"Saved plot   → {out_path}\n")
+    print(f"Saved plot → {out_path}\n")
 
-# --- replace your current main() with this ---
+# --- Replace your current main() with this ---
 def main():
     [choice, display], k = simple_menu()
 
     results = None 
     mode_label = None 
+    flag_confusion_matrix = False
 
     if choice == "a":  # Baseline
         results, best_key = run_baseline()
@@ -327,6 +375,7 @@ def main():
                     max(results.keys(), key=lambda x: results[x]["f1_test"])]
         mode_label=f"d_compare_all_k{k}"
         save_outputs(results, best_key, mode_label)
+        flag_confusion_matrix = True # Flag to display all the matrices for choise D
     
     elif choice == "e":  # Quick demo (no training)
         latest = find_latest_metrics()
@@ -336,7 +385,10 @@ def main():
             print("No metrics found in result/. Run A/B/C/D first to generate metrics.")
             
     if display == "y" and results is not None and mode_label is not None:
-        _plot_confusion_matrix(results=results, mode_label=mode_label)
+        if flag_confusion_matrix:
+            _plot_confusion_matrix(results, mode_label=mode_label, routines_labels=["baseline", "smote", "under"])
+        else:
+            _plot_confusion_matrix(results=results, mode_label=mode_label)
 
 if __name__ == "__main__":
     main()
