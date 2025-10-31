@@ -26,6 +26,6 @@ def get_models(use_class_weight: bool = False):
             subsample=0.8, colsample_bytree=0.8,
             eval_metric="logloss", random_state=42, n_jobs=-1, tree_method="hist"
         ),
-        "SVM" : SVC(C = 0.5, kernel = 'rbf', gamma = 'scale', max_iter = 1000)
+        "SVM" : SVC(C = 0.5, kernel = 'rbf', gamma = 'scale', max_iter = 1000, random_state=42)
     }
     return models
